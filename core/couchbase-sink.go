@@ -2,7 +2,7 @@ package core
 
 import (
 	"log"
-	"../memcached"
+	"github.com/alk/maxi/memcached"
 	"runtime"
 	// "time"
 	"sync/atomic"

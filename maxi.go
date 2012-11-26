@@ -1,7 +1,7 @@
 package main
 
 import (
-	"./core"
+	"github.com/alk/maxi/core"
 	"runtime/pprof"
 	"bufio"
 	"flag"
@@ -11,7 +11,7 @@ import (
 	"time"
 	"fmt"
 	"log"
-	"./memcached"
+	"github.com/alk/maxi/memcached"
 	"encoding/binary"
 )
 
