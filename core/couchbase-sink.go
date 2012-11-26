@@ -1,14 +1,13 @@
 package core
 
 import (
-	"log"
 	"github.com/alk/maxi/memcached"
-	"runtime"
-	// "time"
-	"sync/atomic"
-	"net"
 	"github.com/dustin/go-couchbase"
-	)
+	"log"
+	"net"
+	"runtime"
+	"sync/atomic"
+)
 
 type SinkChan chan *memcached.MCResponse
 
@@ -27,17 +26,17 @@ func (sc SinkChan) OnResponse(req *memcached.MCRequest, resp *memcached.MCRespon
 
 type request struct {
 	req *memcached.MCRequest
-	cb MCDCallback
+	cb  MCDCallback
 }
 
 type sink struct {
-	bucketInfo couchbase.Bucket
-	vbucketMap [][]int
-	numVBuckets int
-	serverList []string
-	subHandlers [][]chan request
+	bucketInfo         couchbase.Bucket
+	vbucketMap         [][]int
+	numVBuckets        int
+	serverList         []string
+	subHandlers        [][]chan request
 	connsPerDownstream int
-	connsRRCounter uint32
+	connsRRCounter     uint32
 }
 
 const QueueDepth = 1024
@@ -76,7 +75,6 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 	}
 	return &h, nil
 }
-
 
 func spawnServerHandler(reqchan chan request, hostname string) {
 	sock, err := net.Dial("tcp", hostname)
@@ -186,7 +184,7 @@ func runDownstream(conn *memcached.Client, reqchan chan request) {
 			log.Panicf("Got error while sending request: %v", err)
 		}
 
-		if (needRespChanSend) {
+		if needRespChanSend {
 			// log.Printf("downstream: Sending delayed thing to respChans: %p", req.cb)
 			respChans <- req
 			// log.Printf("downstream: Done sending to respChans")
@@ -202,12 +200,12 @@ func runDownstream(conn *memcached.Client, reqchan chan request) {
 
 func (s *sink) SendRequest(req *memcached.MCRequest, cb MCDCallback) {
 	// rch = make(chan *memcached.MCResponse, 1)
-	reqStruct := request {
+	reqStruct := request{
 		req: req,
-		cb: cb,
+		cb:  cb,
 	}
 	hash := vbhash(req.Key)
-	vbid := hash & (uint16(s.numVBuckets)-1)
+	vbid := hash & (uint16(s.numVBuckets) - 1)
 	// log.Printf("K: %v, H: %d, vbid: %d", req.Key, hash, vbid)
 	req.VBucket = vbid
 	serverId := s.vbucketMap[vbid][0]

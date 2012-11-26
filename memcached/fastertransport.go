@@ -5,10 +5,10 @@ package memcached
 // http://github.com/dustin/gomemcached
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
-	"encoding/binary"
 )
 
 const (
@@ -62,7 +62,7 @@ const (
 
 	// this is ep-engine specific. Evicts key's value from ram if
 	// it's not dirty
-	EVICT_KEY  = CommandCode(0x93)
+	EVICT_KEY = CommandCode(0x93)
 
 	SASL_LIST_MECHS = CommandCode(0x20)
 	SASL_AUTH       = CommandCode(0x21)
@@ -316,21 +316,21 @@ func (res *MCResponse) TryUnpack(slice []byte) (movedBy uint32, err error) {
 
 	totalSize := be.Uint32(slice[8:12])
 
-	if (uint32(len(slice)) < HDR_LEN + totalSize) {
+	if uint32(len(slice)) < HDR_LEN+totalSize {
 		return 0, nil
 	}
 
 	var pos uint32 = HDR_LEN
 
 	keySize := uint32(be.Uint16(slice[2:4]))
-	key := slice[pos:pos+keySize]
+	key := slice[pos : pos+keySize]
 	pos += keySize
 
 	extraSize := uint32(slice[4])
-	extra := slice[pos:pos+extraSize]
+	extra := slice[pos : pos+extraSize]
 	pos += extraSize
 
-	body := slice[pos:HDR_LEN + totalSize]
+	body := slice[pos : HDR_LEN+totalSize]
 
 	res.Opcode = CommandCode(slice[1])
 	res.Key = key
@@ -364,9 +364,9 @@ func (c *SendClient) TryEnqueueReq(req *MCRequest, must bool) bool {
 	blen := len(c.sendBuffer)
 	bcap := cap(c.sendBuffer)
 
-	if bcap - blen < needed {
-		if (must) {
-			if (len(c.sendBuffer) > 0) {
+	if bcap-blen < needed {
+		if must {
+			if len(c.sendBuffer) > 0 {
 				log.Panicf("something queued when must = true")
 			}
 			c.sendBuffer = make([]byte, needed)[0:0]
@@ -395,9 +395,9 @@ func (c *SendClient) SendEnqueued() (err error) {
 
 type RecvClient struct {
 	reader io.Reader
-	buf []byte
-	r, w uint32
-	err error
+	buf    []byte
+	r, w   uint32
+	err    error
 }
 
 func NewRecvClient(reader io.Reader, bufsize int) (rc RecvClient) {
@@ -468,13 +468,12 @@ func (b *RecvClient) TryUnpackResponse(resp *MCResponse) (*MCResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	if (movedBy > 0) {
+	if movedBy > 0 {
 		b.r += movedBy
 		return resp, nil
 	}
 	return nil, nil
 }
-
 
 type Client struct {
 	Sender SendClient

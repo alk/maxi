@@ -1,18 +1,18 @@
 package main
 
 import (
-	"github.com/alk/maxi/core"
-	"runtime/pprof"
 	"bufio"
-	"flag"
-	"os"
-	"io"
 	"bytes"
-	"time"
-	"fmt"
-	"log"
-	"github.com/alk/maxi/memcached"
 	"encoding/binary"
+	"flag"
+	"fmt"
+	"github.com/alk/maxi/core"
+	"github.com/alk/maxi/memcached"
+	"io"
+	"log"
+	"os"
+	"runtime/pprof"
+	"time"
 )
 
 var ZeroFlagsExpiration [8]byte
@@ -43,13 +43,12 @@ func buildGetRequest(key []byte) (rv memcached.MCRequest) {
 
 type loaderReq struct {
 	respChan core.SinkChan
-	req *memcached.MCRequest
+	req      *memcached.MCRequest
 }
 
-func runRepliesReader(sink core.MCDSink, sentReqs chan loaderReq,
-                      sinkChanBuf chan core.SinkChan) {
+func runRepliesReader(sink core.MCDSink, sentReqs chan loaderReq, sinkChanBuf chan core.SinkChan) {
 	for sreq := range sentReqs {
-		mcresp := <- sreq.respChan
+		mcresp := <-sreq.respChan
 		if mcresp == nil {
 			log.Printf("Got bad response")
 			break
@@ -110,17 +109,17 @@ func runSets(sink core.MCDSink) {
 
 	go runRepliesReader(sink, sentReqs, sinkChanBuf)
 
-	runStdinLoop(func (key, value []byte) {
+	runStdinLoop(func(key, value []byte) {
 		// log.Printf("main: key: %s, value: %d", key, len(value))
-		rch := <- sinkChanBuf
+		rch := <-sinkChanBuf
 		// log.Printf("main: Got rch: %p", rch)
 		mcreq := buildSetRequest(memcached.SET, key, value, 0, 0)
 		// mcreq := buildGetRequest(key)
 		// log.Printf("main: Before SendRequest")
 		sink.SendRequest(&mcreq, rch)
 		// log.Printf("main: After SendRequest")
-		sentReqs <- loaderReq {
-			req: &mcreq,
+		sentReqs <- loaderReq{
+			req:      &mcreq,
 			respChan: rch,
 		}
 		// log.Printf("main: After sentReqs send")
@@ -171,7 +170,7 @@ var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
 
 func main() {
 	flag.Parse()
-	defer func () {
+	defer func() {
 		fmt.Fprintf(os.Stdout, "Send reqs: %d, sends: %d\n", core.RequestsSent, core.Sends)
 	}()
 	if *cpuprofile != "" {
@@ -197,5 +196,5 @@ func main() {
 	}
 
 	// TODO: graceful close of sink
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 }
