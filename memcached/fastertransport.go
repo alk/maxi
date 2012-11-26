@@ -1,5 +1,9 @@
 package memcached
 
+// NOTE: this has a bunch of stuff copied (and heavily modified, thus
+// all bugs are mine) from dustin's gomemcached:
+// http://github.com/dustin/gomemcached
+
 import (
 	"fmt"
 	"io"
