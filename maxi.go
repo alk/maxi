@@ -162,11 +162,22 @@ func runEvicts(sink core.MCDSink) {
 	})
 }
 
+func runDeletes(sink core.MCDSink) {
+	runStdinLoop(func (key, _ []byte) {
+		mcreq := memcached.MCRequest {
+			Opcode: memcached.DELETE,
+			Key: key,
+		}
+		sink.SendRequest(&mcreq, noopCB)
+	})
+}
+
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var sinkURL = flag.String("sinkURL", "http://lh:9000/", "Couchbase URL i.e. http://<host>:8091/")
 var bucketName = flag.String("bucket", "default", "bucket to use")
 var verify = flag.Bool("verify", false, "do GETs to verify")
 var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
+var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
 
 func main() {
 	flag.Parse()
@@ -187,7 +198,9 @@ func main() {
 		panic(err)
 	}
 
-	if *evict {
+	if *delete {
+		runDeletes(sink)
+	} else if *evict {
 		runEvicts(sink)
 	} else if *verify {
 		runGets(sink)
