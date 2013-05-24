@@ -65,6 +65,8 @@ func runRepliesReader(sink core.MCDSink, sentReqs chan loaderReq, sinkChanBuf ch
 		} else {
 			if status == memcached.SUCCESS {
 				// log.Printf("Got ok reply for %v", *mcreq)
+			} else if status == memcached.KEY_EEXISTS {
+				// ignore
 			} else {
 				log.Printf("Got error for %v: %v", *mcreq, *mcresp)
 			}
@@ -127,6 +129,28 @@ func runSets(sink core.MCDSink) {
 	close(sentReqs)
 }
 
+func runAdds(sink core.MCDSink) {
+	sinkChanBuf := make(chan core.SinkChan, core.QueueDepth)
+	for i := 0; i < cap(sinkChanBuf); i++ {
+		sinkChanBuf <- make(core.SinkChan, 1)
+	}
+
+	sentReqs := make(chan loaderReq, core.QueueDepth)
+
+	go runRepliesReader(sink, sentReqs, sinkChanBuf)
+
+	runStdinLoop(func(key, value []byte) {
+		rch := <-sinkChanBuf
+		mcreq := buildSetRequest(memcached.ADD, key, value, 0, 0)
+		sink.SendRequest(&mcreq, rch)
+		sentReqs <- loaderReq{
+			req:      &mcreq,
+			respChan: rch,
+		}
+	})
+	close(sentReqs)
+}
+
 type verifyValue []byte
 
 func (v verifyValue) OnResponse(req *memcached.MCRequest, resp *memcached.MCResponse) {
@@ -177,6 +201,7 @@ var sinkURL = flag.String("sinkURL", "http://lh:9000/", "Couchbase URL i.e. http
 var bucketName = flag.String("bucket", "default", "bucket to use")
 var verify = flag.Bool("verify", false, "do GETs to verify")
 var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
+var add = flag.Bool("add", false, "add keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
 
 func main() {
@@ -204,6 +229,8 @@ func main() {
 		runEvicts(sink)
 	} else if *verify {
 		runGets(sink)
+	} else if *add {
+		runAdds(sink)
 	} else {
 		runSets(sink)
 	}
