@@ -163,11 +163,117 @@ func (v verifyValue) OnResponse(req *memcached.MCRequest, resp *memcached.MCResp
 	}
 }
 
+type verifyMultiValue struct {
+	keys [][]byte
+	values [][]byte
+}
+func (v verifyMultiValue) OnResponse(_ *memcached.MCRequest, resp *memcached.MCResponse) {
+	if resp.Status != memcached.SUCCESS {
+		log.Printf("Bad return on keys: %s: %v", v.keys[0], resp.Status)
+		return
+	}
+	var body []byte = resp.Body
+	replies := int(binary.BigEndian.Uint16(body))
+	if replies != len(v.keys) {
+		log.Printf("Bad number of replies. Got %v when expected %v", replies, len(v.keys))
+		return
+	}
+	body = body[2:]
+	res := memcached.MCResponse{}
+	for i := 0; i < replies; i++ {
+		movedBy, err := res.TryUnpack(body)
+		if err != nil {
+			log.Panicf("Failed to unpack body: %s", err)
+		}
+		body = body[movedBy:]
+
+		if bytes.Compare(res.Body, v.values[i]) != 0 {
+			log.Printf("Bad bad value for key: %s. (%v) vs (%v)\n%s", v.keys[i], res.Body, v.values[i], res.String())
+		}
+	}
+}
+
 func runGets(sink core.MCDSink) {
 	runStdinLoop(func (key, value []byte) {
 		mcreq := buildGetRequest(key)
 		sink.SendRequest(&mcreq, verifyValue(value))
 	})
+}
+
+type manyGetsCapturer struct {
+	slice []byte
+	sc memcached.SendClient
+	batchSize int
+	keys [][]byte
+	values [][]byte
+}
+
+func (wc *manyGetsCapturer) Write(slice []byte) (n int, err error) {
+	wc.slice = slice
+	return len(slice), err
+}
+
+func buildGetManyRequest(keys [][]byte, wc *manyGetsCapturer, opcode memcached.CommandCode) (rv memcached.MCRequest) {
+	var keynoBuf [2]byte
+	binary.BigEndian.PutUint16(keynoBuf[:], uint16(len(keys)))
+	ok := wc.sc.TryEnqueueBytes(keynoBuf[:])
+	if !ok {
+		log.Panicf("crap")
+	}
+
+	for _, key := range keys {
+		mcreq := buildGetRequest(key)
+		mcreq.VBucket = core.VBHash(key) & 63 // TODO
+		// log.Printf("Assiged vbucket %d to %s", mcreq.VBucket, key)
+		ok = wc.sc.TryEnqueueReq(&mcreq, false)
+		if !ok {
+			log.Panicf("crap")
+		}
+	}
+	wc.sc.SendEnqueued()
+
+	rv.Body = append(([]byte)(nil), wc.slice...)
+	rv.Opcode = opcode
+
+	return
+}
+
+func NewManyGetsCapturer(batchSize int) *manyGetsCapturer {
+	wc := &manyGetsCapturer{}
+	wc.sc = memcached.NewSendClient(wc)
+	wc.batchSize = batchSize
+	wc.keys = make([][]byte, wc.batchSize)[:0]
+	wc.values = make([][]byte, wc.batchSize)[:0]
+	return wc
+}
+
+func (wc *manyGetsCapturer) Add(key, value []byte) bool {
+	pos := len(wc.keys)
+	wc.keys = wc.keys[0:pos+1]
+	wc.values = wc.values[0:pos+1]
+	wc.keys[pos] = key
+	wc.values[pos] = value
+	return pos + 1 == wc.batchSize
+}
+
+func runGetsMany(sink core.MCDSink, megaOpCode memcached.CommandCode) {
+	wc := NewManyGetsCapturer(256)
+
+	runStdinLoop(func (key, value []byte) {
+		if wc.Add(key, value) {
+			verifier := verifyMultiValue{keys: wc.keys, values: wc.values}
+			mcreq := buildGetManyRequest(wc.keys, wc, megaOpCode)
+			sink.SendRequest(&mcreq, &verifier)
+			wc.keys = wc.keys[:0]
+			wc.values = wc.values[:0]
+		}
+	})
+
+	if len(wc.keys) != 0 {
+		verifier := verifyMultiValue{keys: wc.keys, values: wc.values}
+		mcreq := buildGetManyRequest(wc.keys, wc, megaOpCode)
+		sink.SendRequest(&mcreq, &verifier)
+	}
 }
 
 type noopCBType struct {}
@@ -200,6 +306,8 @@ var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var sinkURL = flag.String("sinkURL", "http://lh:9000/", "Couchbase URL i.e. http://<host>:8091/")
 var bucketName = flag.String("bucket", "default", "bucket to use")
 var verify = flag.Bool("verify", false, "do GETs to verify")
+var verifyMany = flag.Bool("verifyMany", false, "do GETs to verify")
+var verifyMany2 = flag.Bool("verifyManyE", false, "do GETs to verify")
 var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
 var add = flag.Bool("add", false, "add keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
@@ -227,6 +335,11 @@ func main() {
 		runDeletes(sink)
 	} else if *evict {
 		runEvicts(sink)
+	} else if *verifyMany {
+		runGetsMany(sink, memcached.MEGA_GET)
+	} else if *verifyMany2 {
+		log.Printf("Doing mega gets 2")
+		runGetsMany(sink, memcached.MEGA_GET_2)
 	} else if *verify {
 		runGets(sink)
 	} else if *add {

@@ -76,6 +76,9 @@ const (
 	TAP_VBUCKET_SET      = CommandCode(0x45)
 	TAP_CHECKPOINT_START = CommandCode(0x46)
 	TAP_CHECKPOINT_END   = CommandCode(0x47)
+
+	MEGA_GET = CommandCode(0xb3)
+	MEGA_GET_2 = CommandCode(0xb4)
 )
 
 type Status uint16
@@ -351,6 +354,30 @@ type SendClient struct {
 
 const ClientBufSize = 16384
 
+func (c *SendClient) TryEnqueueBytes(data []byte) bool {
+	if c.sendBuffer == nil {
+		if c.originalBuffer == nil {
+			c.originalBuffer = make([]byte, ClientBufSize)
+		}
+		c.sendBuffer = c.originalBuffer[0:0]
+	}
+
+	needed := len(data)
+
+	blen := len(c.sendBuffer)
+	bcap := cap(c.sendBuffer)
+
+	if bcap-blen < needed {
+		return false
+	}
+
+	c.sendBuffer = c.sendBuffer[0:blen + needed]
+
+	copy(c.sendBuffer[blen:], data)
+
+	return true
+}
+
 func (c *SendClient) TryEnqueueReq(req *MCRequest, must bool) bool {
 	if c.sendBuffer == nil {
 		if c.originalBuffer == nil {
@@ -487,6 +514,11 @@ func ClientFromSock(sock io.ReadWriteCloser) (cl Client) {
 	cl.Recver = NewRecvClient(sock, RecverBufSize)
 	cl.Sender.writeConn = sock
 	cl.Socket = sock
+	return
+}
+
+func NewSendClient(writer io.Writer) (rv SendClient) {
+	rv.writeConn = writer
 	return
 }
 

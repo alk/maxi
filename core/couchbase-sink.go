@@ -39,8 +39,8 @@ type sink struct {
 	connsRRCounter     uint32
 }
 
-const QueueDepth = 1024
-const ConnsPerDownstream = 5
+const QueueDepth = 1
+const ConnsPerDownstream = 1
 
 var RequestsSent uint32
 var Sends uint32
@@ -204,7 +204,7 @@ func (s *sink) SendRequest(req *memcached.MCRequest, cb MCDCallback) {
 		req: req,
 		cb:  cb,
 	}
-	hash := vbhash(req.Key)
+	hash := VBHash(req.Key)
 	vbid := hash & (uint16(s.numVBuckets) - 1)
 	// log.Printf("K: %v, H: %d, vbid: %d", req.Key, hash, vbid)
 	req.VBucket = vbid
