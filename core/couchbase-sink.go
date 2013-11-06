@@ -39,8 +39,8 @@ type sink struct {
 	connsRRCounter     uint32
 }
 
-const QueueDepth = 1024
-const ConnsPerDownstream = 5
+const QueueDepth = 10240
+const ConnsPerDownstream = 4
 
 var RequestsSent uint32
 var Sends uint32
@@ -68,7 +68,7 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 		allChans := make([]chan request, ConnsPerDownstream)
 		for k := 0; k < ConnsPerDownstream; k++ {
 			reqChan := make(chan request, QueueDepth)
-			spawnServerHandler(reqChan, hostname)
+			spawnServerHandler(reqChan, hostname, bucketName)
 			allChans[k] = reqChan
 		}
 		subHandlers[i] = allChans
@@ -76,12 +76,30 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 	return &h, nil
 }
 
-func spawnServerHandler(reqchan chan request, hostname string) {
+func spawnServerHandler(reqchan chan request, hostname string, bucketName string) {
 	sock, err := net.Dial("tcp", hostname)
 	if err != nil {
 		log.Panicf("Failed to connect %s: %v", hostname, err)
 	}
 	conn := memcached.ClientFromSock(sock)
+	authCmd := memcached.MCRequest {
+		Opcode: memcached.SASL_AUTH,
+		Key: ([]byte)("PLAIN"),
+		Body: ([]byte)("\000" + bucketName + "\000"),
+	}
+	sender := conn.Sender
+	sender.TryEnqueueReq(&authCmd, true)
+	err = sender.SendEnqueued()
+	if err != nil {
+		log.Panicf("Failed to authenticate %s: %v", hostname, err)
+	}
+	recver := conn.Recver
+	recver.Fill()
+	mcresp := memcached.MCResponse{}
+	_, err = recver.TryUnpackResponse(&mcresp)
+	if err != nil {
+		log.Panicf("Failed to authenticate %s: %v", hostname, err)
+	}
 	go runDownstream(&conn, reqchan)
 }
 
@@ -204,10 +222,16 @@ func (s *sink) SendRequest(req *memcached.MCRequest, cb MCDCallback) {
 		req: req,
 		cb:  cb,
 	}
-	hash := vbhash(req.Key)
-	vbid := hash & (uint16(s.numVBuckets) - 1)
-	// log.Printf("K: %v, H: %d, vbid: %d", req.Key, hash, vbid)
-	req.VBucket = vbid
+	var vbid uint16
+	if req.VBucket == 0 {
+		hash := vbhash(req.Key)
+		vbid = hash & (uint16(s.numVBuckets) - 1)
+		// log.Printf("K: %v, H: %d, vbid: %d", req.Key, hash, vbid)
+		req.VBucket = vbid
+	} else {
+		req.VBucket = req.VBucket - 1
+		vbid = 0
+	}
 	serverId := s.vbucketMap[vbid][0]
 	counter := atomic.AddUint32(&s.connsRRCounter, 1)
 	counter = counter % uint32(s.connsPerDownstream)
