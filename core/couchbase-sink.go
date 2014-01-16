@@ -53,9 +53,9 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 	if err != nil {
 		return nil, err
 	}
-	serverList := bucketInfo.VBucketServerMap.ServerList
-	subHandlers := make([][]chan request, len(bucketInfo.VBucketServerMap.ServerList))
-	vbucketMap := bucketInfo.VBucketServerMap.VBucketMap
+	serverList := bucketInfo.VBSMJson.ServerList
+	subHandlers := make([][]chan request, len(bucketInfo.VBSMJson.ServerList))
+	vbucketMap := bucketInfo.VBSMJson.VBucketMap
 	h := sink {
 		bucketInfo: *bucketInfo,
 		vbucketMap: vbucketMap,
