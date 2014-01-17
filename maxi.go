@@ -155,7 +155,7 @@ type verifyValue []byte
 
 func (v verifyValue) OnResponse(req *memcached.MCRequest, resp *memcached.MCResponse) {
 	if resp.Status != memcached.SUCCESS {
-		log.Printf("Bad return on key: %s: %v", req.Key, resp)
+		log.Printf("Bad return on key: %s: %v", req.Key, resp.Status)
 		return
 	}
 	if !bytes.Equal([]byte(v), resp.Body) {
@@ -186,17 +186,6 @@ func runEvicts(sink core.MCDSink) {
 	})
 }
 
-func runNotMyVBucket(sink core.MCDSink) {
-	runStdinLoop(func (key, _ []byte) {
-		mcreq := memcached.MCRequest {
-			Opcode: memcached.GET,
-			Key: key,
-			VBucket: 0x5434,
-		}
-		sink.SendRequest(&mcreq, verifyValue(key))
-	})
-}
-
 func runDeletes(sink core.MCDSink) {
 	runStdinLoop(func (key, _ []byte) {
 		mcreq := memcached.MCRequest {
@@ -214,7 +203,6 @@ var verify = flag.Bool("verify", false, "do GETs to verify")
 var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
 var add = flag.Bool("add", false, "add keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
-var testNotMyVBucket = flag.Bool("test-not-my-vbucket", false, "test not my vbucket")
 
 func main() {
 	flag.Parse()
@@ -239,8 +227,6 @@ func main() {
 		runDeletes(sink)
 	} else if *evict {
 		runEvicts(sink)
-	} else if *testNotMyVBucket {
-		runNotMyVBucket(sink)
 	} else if *verify {
 		runGets(sink)
 	} else if *add {
