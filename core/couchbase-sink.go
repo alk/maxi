@@ -40,7 +40,7 @@ type sink struct {
 }
 
 const QueueDepth = 10240
-const ConnsPerDownstream = 4
+const ConnsPerDownstream = 32
 
 var RequestsSent uint32
 var Sends uint32
