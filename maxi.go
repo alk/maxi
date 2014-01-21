@@ -31,7 +31,9 @@ func buildSetRequest(code memcached.CommandCode, key []byte, body []byte, flags 
 	rv.Opcode = code
 	rv.Key = key
 	rv.Body = body
-	rv.Extras = encodeFlagsExpiration(flags, expiration)
+	if code != memcached.APPEND {
+		rv.Extras = encodeFlagsExpiration(flags, expiration)
+	}
 	return
 }
 
@@ -101,7 +103,8 @@ func runStdinLoop(fn stdinInnerFn) {
 	// log.Printf("done")
 }
 
-func runSets(sink core.MCDSink) {
+
+func doRunSets(sink core.MCDSink, command memcached.CommandCode) {
 	sinkChanBuf := make(chan core.SinkChan, core.QueueDepth)
 	for i := 0; i < cap(sinkChanBuf); i++ {
 		sinkChanBuf <- make(core.SinkChan, 1)
@@ -112,43 +115,31 @@ func runSets(sink core.MCDSink) {
 	go runRepliesReader(sink, sentReqs, sinkChanBuf)
 
 	runStdinLoop(func(key, value []byte) {
-		// log.Printf("main: key: %s, value: %d", key, len(value))
 		rch := <-sinkChanBuf
-		// log.Printf("main: Got rch: %p", rch)
-		mcreq := buildSetRequest(memcached.SET, key, value, 0, 0)
-		// mcreq := buildGetRequest(key)
-		// log.Printf("main: Before SendRequest")
+		mcreq := buildSetRequest(command, key, value, 0, 0)
 		sink.SendRequest(&mcreq, rch)
-		// log.Printf("main: After SendRequest")
 		sentReqs <- loaderReq{
 			req:      &mcreq,
 			respChan: rch,
 		}
-		// log.Printf("main: After sentReqs send")
 	})
 	close(sentReqs)
+
+	for i := 0; i < cap(sinkChanBuf); i++ {
+		_ = <- sinkChanBuf
+	}
+}
+
+func runSets(sink core.MCDSink) {
+	doRunSets(sink, memcached.SET)
 }
 
 func runAdds(sink core.MCDSink) {
-	sinkChanBuf := make(chan core.SinkChan, core.QueueDepth)
-	for i := 0; i < cap(sinkChanBuf); i++ {
-		sinkChanBuf <- make(core.SinkChan, 1)
-	}
+	doRunSets(sink, memcached.ADD)
+}
 
-	sentReqs := make(chan loaderReq, core.QueueDepth)
-
-	go runRepliesReader(sink, sentReqs, sinkChanBuf)
-
-	runStdinLoop(func(key, value []byte) {
-		rch := <-sinkChanBuf
-		mcreq := buildSetRequest(memcached.ADD, key, value, 0, 0)
-		sink.SendRequest(&mcreq, rch)
-		sentReqs <- loaderReq{
-			req:      &mcreq,
-			respChan: rch,
-		}
-	})
-	close(sentReqs)
+func runAppends(sink core.MCDSink) {
+	doRunSets(sink, memcached.APPEND)
 }
 
 type verifyValue []byte
@@ -202,6 +193,7 @@ var bucketName = flag.String("bucket", "default", "bucket to use")
 var verify = flag.Bool("verify", false, "do GETs to verify")
 var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
 var add = flag.Bool("add", false, "add keys instead of get/sets")
+var appends = flag.Bool("append", false, "append keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
 
 func main() {
@@ -231,10 +223,12 @@ func main() {
 		runGets(sink)
 	} else if *add {
 		runAdds(sink)
+	} else if *appends {
+		runAppends(sink)
 	} else {
 		runSets(sink)
 	}
 
 	// TODO: graceful close of sink
-	time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
 }
