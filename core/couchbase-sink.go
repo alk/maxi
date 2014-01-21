@@ -39,8 +39,8 @@ type sink struct {
 	connsRRCounter     uint32
 }
 
-const QueueDepth = 10240
-const ConnsPerDownstream = 32
+const QueueDepth = 1024
+const ConnsPerDownstream = 16
 
 var RequestsSent uint32
 var Sends uint32
