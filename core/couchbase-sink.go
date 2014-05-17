@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 	"sync/atomic"
+	"bytes"
 )
 
 type SinkChan chan *memcached.MCResponse
@@ -68,7 +69,7 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 		allChans := make([]chan request, ConnsPerDownstream)
 		for k := 0; k < ConnsPerDownstream; k++ {
 			reqChan := make(chan request, QueueDepth)
-			spawnServerHandler(reqChan, hostname)
+			spawnServerHandler(reqChan, hostname, bucketName)
 			allChans[k] = reqChan
 		}
 		subHandlers[i] = allChans
@@ -76,18 +77,39 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 	return &h, nil
 }
 
-func spawnServerHandler(reqchan chan request, hostname string) {
+func buildPlainAuthRequest(username string, password string) (rv memcached.MCRequest) {
+	usrBytes := ([]byte)(username)
+	pwdBytes := ([]byte)(password)
+	rv.Opcode = memcached.SASL_AUTH
+	rv.Key = ([]byte)("PLAIN")
+	rv.Body = bytes.Join(
+		([][]byte{usrBytes, usrBytes, pwdBytes})[:],
+		([]byte)("\000"))
+	return
+}
+
+func spawnServerHandler(reqchan chan request, hostname string, bucketName string) {
 	sock, err := net.Dial("tcp", hostname)
 	if err != nil {
 		log.Panicf("Failed to connect %s: %v", hostname, err)
 	}
 	conn := memcached.ClientFromSock(sock)
+	authReq := buildPlainAuthRequest(bucketName, "")
+	authBuf := make([]byte, authReq.Size())
+	authReq.FillBytes(authBuf)
+	log.Printf("authBuf: %v", authBuf)
+	_, err = conn.Socket.Write(authBuf)
+	if err != nil {
+		log.Panic(err)
+	}
 	go runDownstream(&conn, reqchan)
 }
 
 func runDownstreamReader(conn *memcached.Client, callbacks chan request) {
 	recver := &conn.Recver
+	seenAuthResponce := false
 	for reqStruct := range callbacks {
+again:
 		// log.Printf("dreader: got some Reqstruct: %v, %p", reqStruct, reqStruct.cb)
 		mcresp := memcached.MCResponse{}
 		for {
@@ -112,7 +134,13 @@ func runDownstreamReader(conn *memcached.Client, callbacks chan request) {
 		// log.Printf("State: %v", recver)
 
 		// TODO: exception handling?
-		reqStruct.cb.OnResponse(reqStruct.req, &mcresp)
+		if seenAuthResponce {
+			reqStruct.cb.OnResponse(reqStruct.req, &mcresp)
+		} else {
+			log.Printf("auth response: %v", mcresp)
+			seenAuthResponce = true
+			goto again
+		}
 		// log.Printf("dreader: After onResponse: %p", reqStruct.cb)
 	}
 }
