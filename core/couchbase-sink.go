@@ -1,13 +1,13 @@
 package core
 
 import (
+	"bytes"
 	"github.com/alk/maxi/memcached"
 	"github.com/dustin/go-couchbase"
 	"log"
 	"net"
 	"runtime"
 	"sync/atomic"
-	"bytes"
 )
 
 type SinkChan chan *memcached.MCResponse
@@ -109,7 +109,7 @@ func runDownstreamReader(conn *memcached.Client, callbacks chan request) {
 	recver := &conn.Recver
 	seenAuthResponce := false
 	for reqStruct := range callbacks {
-again:
+	again:
 		// log.Printf("dreader: got some Reqstruct: %v, %p", reqStruct, reqStruct.cb)
 		mcresp := memcached.MCResponse{}
 		for {
@@ -138,6 +138,9 @@ again:
 			reqStruct.cb.OnResponse(reqStruct.req, &mcresp)
 		} else {
 			log.Printf("auth response: %v", mcresp)
+			if mcresp.Status != memcached.SUCCESS {
+				log.Fatal("Failed auth")
+			}
 			seenAuthResponce = true
 			goto again
 		}
@@ -148,7 +151,7 @@ again:
 func peekMoreReq(c chan request) (r request, ok bool) {
 	ok = false
 	select {
-	case r, ok = <- c:
+	case r, ok = <-c:
 	default:
 	}
 	return
