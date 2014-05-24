@@ -290,6 +290,7 @@ type MCResponse struct {
 	Opaque uint32
 	// The CAS identifier (if applicable)
 	Cas uint64
+	Datatype byte
 	// Extras, key, and body for this response
 	Extras, Key, Body []byte
 }
@@ -338,6 +339,7 @@ func (res *MCResponse) TryUnpack(slice []byte) (movedBy uint32, err error) {
 	res.Key = key
 	res.Extras = extra
 	res.Status = Status(be.Uint16(slice[6:8]))
+	res.Datatype = slice[5]
 	res.Opaque = be.Uint32(slice[12:16])
 	res.Cas = be.Uint64(slice[16:24])
 	res.Body = body

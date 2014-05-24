@@ -151,7 +151,7 @@ func (v verifyValue) OnResponse(req *memcached.MCRequest, resp *memcached.MCResp
 		return
 	}
 	if !bytes.Equal([]byte(v), resp.Body) {
-		log.Printf("Value mismatch for: %s", req.Key)
+		log.Printf("Value mismatch for: %s datatype: %d", req.Key, resp.Datatype)
 	}
 }
 
