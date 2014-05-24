@@ -85,8 +85,8 @@ func runStdinLoop(fn stdinInnerFn) {
 
 	for {
 		line, err := mystdin.ReadBytes('\n')
-		if (len(line) == 0 && err != nil) {
-			if (err != io.EOF) {
+		if len(line) == 0 && err != nil {
+			if err != io.EOF {
 				log.Fatalf("Got error on stdin: ", err)
 			}
 			break
@@ -126,7 +126,7 @@ func doRunSets(sink core.MCDSink, command memcached.CommandCode) {
 	close(sentReqs)
 
 	for i := 0; i < cap(sinkChanBuf); i++ {
-		_ = <- sinkChanBuf
+		_ = <-sinkChanBuf
 	}
 }
 
