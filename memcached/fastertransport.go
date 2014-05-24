@@ -212,7 +212,7 @@ type MCRequest struct {
 	// An opaque value to be returned with this request
 	Opaque uint32
 	// The vbucket to which this command belongs
-	VBucket uint16
+	VBucket  uint16
 	Datatype byte
 	// Command extras, key, and body
 	Extras, Key, Body []byte
@@ -307,9 +307,8 @@ func (res MCResponse) Error() string {
 		res.Status, string(res.Body))
 }
 
-
 func (res *MCResponse) TryUnpack(slice []byte) (movedBy uint32, err error) {
-	if (len(slice) < HDR_LEN) {
+	if len(slice) < HDR_LEN {
 		return 0, nil
 	}
 
@@ -379,7 +378,7 @@ func (c *SendClient) TryEnqueueReq(req *MCRequest, must bool) bool {
 		return false
 	}
 
-	c.sendBuffer = c.sendBuffer[0:blen + needed]
+	c.sendBuffer = c.sendBuffer[0 : blen+needed]
 
 	req.FillBytes(c.sendBuffer[blen:])
 

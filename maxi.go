@@ -113,7 +113,6 @@ func runStdinLoop(fn stdinInnerFn) {
 	// log.Printf("done")
 }
 
-
 func doRunSets(sink core.MCDSink, command memcached.CommandCode) {
 	sinkChanBuf := make(chan core.SinkChan, core.QueueDepth)
 	for i := 0; i < cap(sinkChanBuf); i++ {
@@ -165,33 +164,34 @@ func (v verifyValue) OnResponse(req *memcached.MCRequest, resp *memcached.MCResp
 }
 
 func runGets(sink core.MCDSink) {
-	runStdinLoop(func (key, value []byte) {
+	runStdinLoop(func(key, value []byte) {
 		mcreq := buildGetRequest(key)
 		sink.SendRequest(&mcreq, verifyValue(value))
 	})
 }
 
-type noopCBType struct {}
+type noopCBType struct{}
+
 var noopCB noopCBType
 
 func (_ noopCBType) OnResponse(_ *memcached.MCRequest, _ *memcached.MCResponse) {
 }
 
 func runEvicts(sink core.MCDSink) {
-	runStdinLoop(func (key, _ []byte) {
-		mcreq := memcached.MCRequest {
+	runStdinLoop(func(key, _ []byte) {
+		mcreq := memcached.MCRequest{
 			Opcode: memcached.EVICT_KEY,
-			Key: key,
+			Key:    key,
 		}
 		sink.SendRequest(&mcreq, noopCB)
 	})
 }
 
 func runDeletes(sink core.MCDSink) {
-	runStdinLoop(func (key, _ []byte) {
-		mcreq := memcached.MCRequest {
+	runStdinLoop(func(key, _ []byte) {
+		mcreq := memcached.MCRequest{
 			Opcode: memcached.DELETE,
-			Key: key,
+			Key:    key,
 		}
 		sink.SendRequest(&mcreq, noopCB)
 	})
