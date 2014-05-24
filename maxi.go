@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"code.google.com/p/snappy-go/snappy"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -99,6 +100,14 @@ func runStdinLoop(fn stdinInnerFn) {
 		}
 		key := line[0:idx]
 		value := bytes.TrimRight(line[idx+1:], "\n")
+		if *useSnappy {
+			origLen := len(value)
+			value, err = snappy.Encode(nil, value)
+			if err != nil {
+				log.Fatalf("Got error trying to compress value: ", err)
+			}
+			log.Printf("compressed value %d -> %d", origLen, len(value))
+		}
 		fn(key, value)
 	}
 	// log.Printf("done")
@@ -197,6 +206,7 @@ var add = flag.Bool("add", false, "add keys instead of get/sets")
 var appends = flag.Bool("append", false, "append keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
 var datatype = flag.Int("datatype", -1, "datatype to set (-1 means don't negotiate datatype support)")
+var useSnappy = flag.Bool("use-snappy", false, "compress incoming values using snappy")
 
 func main() {
 	flag.Parse()
