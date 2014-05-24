@@ -46,6 +46,7 @@ const (
 	FLUSHQ     = CommandCode(0x18)
 	APPENDQ    = CommandCode(0x19)
 	PREPENDQ   = CommandCode(0x1a)
+	HELLO      = CommandCode(0x1f)
 	RGET       = CommandCode(0x30)
 	RSET       = CommandCode(0x31)
 	RSETQ      = CommandCode(0x32)
@@ -212,6 +213,7 @@ type MCRequest struct {
 	Opaque uint32
 	// The vbucket to which this command belongs
 	VBucket uint16
+	Datatype byte
 	// Command extras, key, and body
 	Extras, Key, Body []byte
 }
@@ -243,7 +245,7 @@ func (req *MCRequest) FillBytes(data []byte) {
 	// 4
 	data[pos] = byte(len(req.Extras))
 	pos++
-	// data[pos] = 0
+	data[pos] = req.Datatype
 	pos++
 	binary.BigEndian.PutUint16(data[pos:pos+2], req.VBucket)
 	pos += 2

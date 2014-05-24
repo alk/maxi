@@ -14,6 +14,7 @@ type SinkChan chan *memcached.MCResponse
 
 type MCDSink interface {
 	SendRequest(req *memcached.MCRequest, callback MCDCallback)
+	SendAllConnsRequest(req *memcached.MCRequest, callback MCDCallback) int
 	// Stop()
 }
 
@@ -57,12 +58,12 @@ func NewCouchbaseSink(baseURL, bucketName string) (MCDSink, error) {
 	serverList := bucketInfo.VBSMJson.ServerList
 	subHandlers := make([][]chan request, len(bucketInfo.VBSMJson.ServerList))
 	vbucketMap := bucketInfo.VBSMJson.VBucketMap
-	h := sink {
-		bucketInfo: *bucketInfo,
-		vbucketMap: vbucketMap,
-		numVBuckets: len(vbucketMap),
-		serverList: serverList,
-		subHandlers: subHandlers,
+	h := sink{
+		bucketInfo:         *bucketInfo,
+		vbucketMap:         vbucketMap,
+		numVBuckets:        len(vbucketMap),
+		serverList:         serverList,
+		subHandlers:        subHandlers,
 		connsPerDownstream: ConnsPerDownstream,
 	}
 	for i, hostname := range serverList {
@@ -244,4 +245,26 @@ func (s *sink) SendRequest(req *memcached.MCRequest, cb MCDCallback) {
 	counter = counter % uint32(s.connsPerDownstream)
 	// log.Printf("Sending request %v to server: %s", reqStruct, s.serverList[serverId])
 	s.subHandlers[serverId][counter] <- reqStruct
+}
+
+func (s *sink) SendAllConnsRequest(req *memcached.MCRequest, cb MCDCallback) (count int) {
+	count = len(s.subHandlers) * s.connsPerDownstream
+	for i := 0; i < len(s.subHandlers); i++ {
+		for j := 0; j < s.connsPerDownstream; j++ {
+			r := *req
+			reqStruct := request{req: &r, cb: cb}
+			s.subHandlers[i][j] <- reqStruct
+		}
+	}
+	return
+}
+
+func RunRequestOnAllConns(s MCDSink, req *memcached.MCRequest) (responses []*memcached.MCResponse) {
+	c := make(SinkChan, 32)
+	count := s.SendAllConnsRequest(req, c)
+	responses = make([]*memcached.MCResponse, 0, count)
+	for ; count > 0; count-- {
+		responses = append(responses, <-c)
+	}
+	return
 }

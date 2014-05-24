@@ -31,6 +31,7 @@ func buildSetRequest(code memcached.CommandCode, key []byte, body []byte, flags 
 	rv.Opcode = code
 	rv.Key = key
 	rv.Body = body
+	rv.Datatype = (byte)(*datatype)
 	if code != memcached.APPEND {
 		rv.Extras = encodeFlagsExpiration(flags, expiration)
 	}
@@ -195,6 +196,7 @@ var evict = flag.Bool("evict", false, "evict keys instead of get/sets")
 var add = flag.Bool("add", false, "add keys instead of get/sets")
 var appends = flag.Bool("append", false, "append keys instead of get/sets")
 var delete = flag.Bool("delete", false, "delete keys instead of get/sets")
+var datatype = flag.Int("datatype", -1, "datatype to set (-1 means don't negotiate datatype support)")
 
 func main() {
 	flag.Parse()
@@ -213,6 +215,29 @@ func main() {
 	sink, err := core.NewCouchbaseSink(*sinkURL, *bucketName)
 	if err != nil {
 		panic(err)
+	}
+
+	if *datatype != -1 {
+		datatypeBody := []byte{0, 1}
+		req := memcached.MCRequest{
+			Opcode: memcached.HELLO,
+			Key:    ([]byte)("maxi"),
+			// thats datatype feature encoding as bigendan
+			// 16-bit int
+			Body: datatypeBody,
+		}
+		replies := core.RunRequestOnAllConns(sink, &req)
+		for _, resp := range replies {
+			if resp.Status != memcached.SUCCESS {
+				log.Fatal("got non-success from server: %v", resp.Status)
+			}
+			if !bytes.Equal(datatypeBody, resp.Body) {
+				log.Fatal("Got non-datatype body: %v", resp.Body)
+			}
+		}
+		log.Printf("enabled datatype support")
+	} else {
+		*datatype = 0
 	}
 
 	if *delete {
